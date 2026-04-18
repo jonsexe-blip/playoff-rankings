@@ -226,6 +226,9 @@ export function PlayerRankings({
                   <p className="text-sm text-muted-foreground">2 pts each if your top 8 advance</p>
                 </div>
               </div>
+              <p className="text-sm text-muted-foreground pt-1">
+                + Upset multiplier: lower seeds earn bonus points when they advance (up to 2× for an 8-seed in NBA, 1.5× for a wild card in NHL).
+              </p>
             </div>
           </div>
 

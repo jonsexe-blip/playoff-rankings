@@ -15,7 +15,7 @@ async function HomeContent() {
     getPlayersWithRankings(),
   ])
 
-  const scores = calculatePlayerScores(players, nbaSeries, nhlSeries)
+  const scores = calculatePlayerScores(players, nbaSeries, nhlSeries, teams)
 
   return (
     <>

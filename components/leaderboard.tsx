@@ -62,8 +62,8 @@ export function Leaderboard({ scores }: LeaderboardProps) {
       )}
 
       {/* Scoring Info */}
-      <div className="mt-8 p-6 bg-muted rounded-lg">
-        <h4 className="text-lg font-bold text-foreground mb-4">Scoring System</h4>
+      <div className="mt-8 p-6 bg-muted rounded-lg space-y-4">
+        <h4 className="text-lg font-bold text-foreground">Scoring System</h4>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
           <div>
             <span className="text-muted-foreground">Champion Pick</span>
@@ -82,6 +82,9 @@ export function Leaderboard({ scores }: LeaderboardProps) {
             <p className="text-foreground font-bold text-lg">2 pts each</p>
           </div>
         </div>
+        <p className="text-sm text-muted-foreground">
+          + Upset multiplier: lower seeds earn bonus points when they advance (up to 2× for an 8-seed in NBA, 1.5× for a wild card in NHL).
+        </p>
       </div>
     </div>
   )
