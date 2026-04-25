@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { PathToVictory } from '@/components/path-to-victory'
 import type { PlayerScore } from '@/lib/types'
 
 interface LeaderboardProps {
@@ -13,23 +14,31 @@ export function Leaderboard({ scores }: LeaderboardProps) {
           No picks submitted yet — be the first!
         </p>
       ) : (
-        scores.map((entry, index) => (
+        scores.map((entry, index) => {
+          const rank = scores.findIndex(s => s.total === entry.total) + 1
+          const isFirst = rank === 1
+          return (
           <div
             key={entry.player.id}
             className={cn(
               'flex items-center gap-6 p-6 lg:p-8 rounded-lg border transition-colors',
-              index === 0
+              isFirst
                 ? 'bg-primary/10 border-primary'
                 : 'bg-card border-border hover:border-muted-foreground/50'
             )}
           >
             {/* Rank */}
-            <div className="flex-shrink-0 w-16 lg:w-20">
+            <div className="flex-shrink-0 w-16 lg:w-20 flex flex-col items-center">
+              {rank <= 3 && (
+                <span className="text-2xl leading-none mb-0.5">
+                  {rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉'}
+                </span>
+              )}
               <span className={cn(
                 'text-4xl lg:text-5xl font-extrabold',
-                index === 0 ? 'text-primary' : 'text-muted-foreground'
+                isFirst ? 'text-primary' : 'text-muted-foreground'
               )}>
-                {index + 1}
+                {rank}
               </span>
             </div>
 
@@ -46,6 +55,21 @@ export function Leaderboard({ scores }: LeaderboardProps) {
                   NHL: <span className="text-foreground">{entry.nhlScore} pts</span>
                 </span>
               </div>
+              {entry.winProbability !== undefined && (
+                <div className="mt-1">
+                  <span className="text-xs text-muted-foreground">
+                    Win probability:{' '}
+                    <span className="text-primary font-semibold">
+                      {(entry.winProbability * 100).toFixed(1)}%
+                    </span>
+                  </span>
+                </div>
+              )}
+              {entry.winningPaths !== undefined && (
+                <div className="mt-2">
+                  <PathToVictory winningPaths={entry.winningPaths} />
+                </div>
+              )}
             </div>
 
             {/* Total Score */}
@@ -58,7 +82,7 @@ export function Leaderboard({ scores }: LeaderboardProps) {
               </div>
             </div>
           </div>
-        ))
+        )})
       )}
 
       {/* Scoring Info */}
@@ -66,24 +90,24 @@ export function Leaderboard({ scores }: LeaderboardProps) {
         <h4 className="text-lg font-bold text-foreground">Scoring System</h4>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
           <div>
-            <span className="text-muted-foreground">Champion Pick</span>
-            <p className="text-foreground font-bold text-lg">Up to 16 pts</p>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Finalist Pick</span>
-            <p className="text-foreground font-bold text-lg">Up to 8 pts</p>
+            <span className="text-muted-foreground">Second Round</span>
+            <p className="text-foreground font-bold text-lg">2 × (16 − rank)</p>
           </div>
           <div>
             <span className="text-muted-foreground">Conf. Finals</span>
-            <p className="text-foreground font-bold text-lg">4 pts each</p>
+            <p className="text-foreground font-bold text-lg">4 × (16 − rank)</p>
           </div>
           <div>
-            <span className="text-muted-foreground">Second Round</span>
-            <p className="text-foreground font-bold text-lg">2 pts each</p>
+            <span className="text-muted-foreground">Finals</span>
+            <p className="text-foreground font-bold text-lg">8 × (16 − rank)</p>
+          </div>
+          <div>
+            <span className="text-muted-foreground">Champion</span>
+            <p className="text-foreground font-bold text-lg">16 × (16 − rank)</p>
           </div>
         </div>
         <p className="text-sm text-muted-foreground">
-          + Upset multiplier: lower seeds earn bonus points when they advance (up to 2× for an 8-seed in NBA, 1.5× for a wild card in NHL).
+          Points are cumulative — teams earn at each round they advance through. All points × upset multiplier (up to 2× for an 8-seed in NBA, 1.5× for a wild card in NHL).
         </p>
       </div>
     </div>

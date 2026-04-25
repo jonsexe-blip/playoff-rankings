@@ -64,10 +64,17 @@ export interface PlayoffSettings {
   seasonLabel: string
 }
 
+export interface PathEntry {
+  nbaWinner: string  // team abbreviation
+  nhlWinner: string  // team abbreviation
+}
+
 // Derived type used for leaderboard display
 export interface PlayerScore {
   player: Player
   nbaScore: number
   nhlScore: number
   total: number
+  winProbability?: number                             // 0.0–1.0, shown after R2 complete
+  winningPaths?: PathEntry[] | 'any' | 'eliminated'  // shown after R3 complete
 }
