@@ -61,7 +61,7 @@ export function deriveResults(series: Series[]): LeagueResults {
 // Teams earn points at each round they advance through (cumulative)
 function roundScore(idx: number, base: number, slug: string, teamsById: Map<string, Team>): number {
   const pts = Math.max(0, 16 - (idx + 1)) // 16 - ranking, 1-indexed
-  return Math.round(base * pts * getSeedMultiplier(slug, teamsById))
+  return base * pts * getSeedMultiplier(slug, teamsById)
 }
 
 export function calculatePlayerScore(

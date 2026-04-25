@@ -6,6 +6,10 @@ interface LeaderboardProps {
   scores: PlayerScore[]
 }
 
+function fmt(n: number): string {
+  return parseFloat(n.toFixed(2)).toString()
+}
+
 export function Leaderboard({ scores }: LeaderboardProps) {
   return (
     <div className="space-y-4">
@@ -15,7 +19,7 @@ export function Leaderboard({ scores }: LeaderboardProps) {
         </p>
       ) : (
         scores.map((entry, index) => {
-          const rank = scores.findIndex(s => s.total === entry.total) + 1
+          const rank = scores.findIndex(s => fmt(s.total) === fmt(entry.total)) + 1
           const isFirst = rank === 1
           return (
           <div
@@ -49,10 +53,10 @@ export function Leaderboard({ scores }: LeaderboardProps) {
               </h3>
               <div className="flex items-center gap-4 mt-2">
                 <span className="text-sm font-medium text-muted-foreground">
-                  NBA: <span className="text-foreground">{entry.nbaScore} pts</span>
+                  NBA: <span className="text-foreground">{fmt(entry.nbaScore)} pts</span>
                 </span>
                 <span className="text-sm font-medium text-muted-foreground">
-                  NHL: <span className="text-foreground">{entry.nhlScore} pts</span>
+                  NHL: <span className="text-foreground">{fmt(entry.nhlScore)} pts</span>
                 </span>
               </div>
               {entry.winProbability !== undefined && (
@@ -75,7 +79,7 @@ export function Leaderboard({ scores }: LeaderboardProps) {
             {/* Total Score */}
             <div className="flex-shrink-0 text-right">
               <div className="text-3xl lg:text-4xl font-extrabold text-foreground">
-                {entry.total}
+                {fmt(entry.total)}
               </div>
               <div className="text-sm font-medium text-muted-foreground tracking-wide">
                 Total Points
