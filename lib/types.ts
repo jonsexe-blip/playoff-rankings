@@ -64,9 +64,14 @@ export interface PlayoffSettings {
   seasonLabel: string
 }
 
-export interface PathEntry {
-  nbaWinner: string  // team abbreviation
-  nhlWinner: string  // team abbreviation
+export interface PickResult {
+  teamId: string
+  teamName: string
+  rank: number
+  roundLabel: 'Second Round' | 'Conf. Finals' | 'Finals' | 'Champion'
+  base: number
+  multiplier: number
+  points: number
 }
 
 // Derived type used for leaderboard display
@@ -75,6 +80,6 @@ export interface PlayerScore {
   nbaScore: number
   nhlScore: number
   total: number
-  winProbability?: number                             // 0.0–1.0, shown after R2 complete
-  winningPaths?: PathEntry[] | 'any' | 'eliminated'  // shown after R3 complete
+  nbaBreakdown: PickResult[]
+  nhlBreakdown: PickResult[]
 }

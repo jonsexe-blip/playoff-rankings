@@ -1,4 +1,4 @@
-import type { Player, Series, PlayerScore, PathEntry, Team } from '@/lib/types'
+import type { Player, Series, PlayerScore, Team, PickResult } from '@/lib/types'
 
 const NBA_MULTIPLIERS: Record<number, number> = {
   1: 1.0, 2: 1.1, 3: 1.2, 4: 1.3,
@@ -12,21 +12,6 @@ function getSeedMultiplier(slug: string, teamsById: Map<string, Team>): number {
   // NHL: division winner=1.0, div 2nd=1.15, div 3rd=1.3, WC1=1.4, WC2=1.5
   if (team.division === 'WC') return team.seed === 1 ? 1.4 : 1.5
   return team.seed === 1 ? 1.0 : team.seed === 2 ? 1.15 : 1.3
-}
-
-// P(team1 wins series) based on seed strength. Lower seed number = stronger team.
-// NBA: strength = 9 - seed (seed 1 → 8, seed 8 → 1)
-// NHL: div winner=5, div 2nd=4, div 3rd=3, WC1=2, WC2=1
-function seriesWinProb(team1Slug: string, team2Slug: string, teamsById: Map<string, Team>): number {
-  function strength(slug: string): number {
-    const t = teamsById.get(slug)
-    if (!t) return 1
-    if (t.league === 'NBA') return 9 - t.seed
-    if (t.division === 'WC') return t.seed === 1 ? 2 : 1
-    return 6 - t.seed  // div winner=5, div 2nd=4, div 3rd=3
-  }
-  const s1 = strength(team1Slug), s2 = strength(team2Slug)
-  return s1 / (s1 + s2)
 }
 
 interface LeagueResults {
@@ -96,136 +81,32 @@ export function calculatePlayerScore(
   return score
 }
 
-// ── Win probability helpers ──────────────────────────────────────────────────
-
-function isRoundComplete(series: Series[], round: 1 | 2 | 3 | 4): boolean {
-  const roundSeries = series.filter(s => s.round === round)
-  return roundSeries.length > 0 && roundSeries.every(s => s.winner !== null)
-}
-
-// Recursive enumeration: processes one unresolved series at a time so that
-// propagated team IDs are picked up in subsequent recursive steps.
-// Handles R2→R3 propagation (once both R2 series in a conference resolve,
-// populate the R3 matchup slots) and R3→R4 propagation (CF winner → Finals).
-function enumerate(
-  series: Series[],
+function calculatePickBreakdown(
+  player: Player,
+  results: LeagueResults,
+  league: 'nba' | 'nhl',
   teamsById: Map<string, Team>
-): { sim: Series[], weight: number }[] {
-  const next = series.find(s => s.winner === null && s.team1Id && s.team2Id)
-  if (!next) return [{ sim: series, weight: 1.0 }]
+): PickResult[] {
+  const rankings = player.rankings[league]
+  const picks: PickResult[] = []
 
-  const p1 = seriesWinProb(next.team1Id, next.team2Id, teamsById)
-  const results: { sim: Series[], weight: number }[] = []
-
-  for (const [winner, p] of [[next.team1Id, p1], [next.team2Id, 1 - p1]] as const) {
-    let updated = series.map(s => s.id === next.id ? { ...s, winner } : s)
-
-    if (next.round === 2) {
-      // Once both R2 series in this conference are decided, populate R3 team slots
-      const confR2 = updated.filter(s => s.round === 2 && s.conference === next.conference)
-      if (confR2.every(s => s.winner !== null)) {
-        const [w1, w2] = confR2.map(s => s.winner!)
-        updated = updated.map(s => {
-          if (s.round !== 3 || s.conference !== next.conference || s.team1Id) return s
-          return { ...s, team1Id: w1, team2Id: w2 }
-        })
-      }
-    }
-
-    if (next.round === 3) {
-      // Propagate CF winner into Finals (R4) team slots
-      updated = updated.map(s => {
-        if (s.round !== 4) return s
-        return {
-          ...s,
-          ...(next.conference === 'East' ? { team1Id: winner } : { team2Id: winner }),
-        }
-      })
-    }
-
-    for (const sub of enumerate(updated, teamsById)) {
-      results.push({ sim: sub.sim, weight: p * sub.weight })
-    }
-  }
-  return results
-}
-
-function buildAllScenarios(
-  nbaSeries: Series[],
-  nhlSeries: Series[],
-  teamsById: Map<string, Team>
-): { nba: Series[], nhl: Series[], weight: number }[] {
-  const nbaScenarios = enumerate(nbaSeries, teamsById)
-  const nhlScenarios = enumerate(nhlSeries, teamsById)
-  return nbaScenarios.flatMap(nba =>
-    nhlScenarios.map(nhl => ({ nba: nba.sim, nhl: nhl.sim, weight: nba.weight * nhl.weight }))
-  )
-}
-
-function calculateWinProbabilities(
-  players: Player[],
-  nbaSeries: Series[],
-  nhlSeries: Series[],
-  teamsById: Map<string, Team>
-): Map<string, number> {
-  const allScenarios = buildAllScenarios(nbaSeries, nhlSeries, teamsById)
-  const wins: Record<string, number> = Object.fromEntries(players.map(p => [p.id, 0]))
-
-  for (const { nba, nhl, weight } of allScenarios) {
-    const nbaRes = deriveResults(nba)
-    const nhlRes = deriveResults(nhl)
-    const totals = players.map(p => ({
-      id: p.id,
-      total: calculatePlayerScore(p, nbaRes, 'nba', teamsById)
-        + calculatePlayerScore(p, nhlRes, 'nhl', teamsById),
-    }))
-    if (totals.length === 0) continue
-    const max = Math.max(...totals.map(t => t.total))
-    const scenarioWinners = totals.filter(t => t.total === max)
-    scenarioWinners.forEach(w => { wins[w.id] += weight / scenarioWinners.length })
+  const add = (teamId: string | null, base: number, roundLabel: PickResult['roundLabel']) => {
+    if (!teamId) return
+    const idx = rankings.indexOf(teamId)
+    if (idx === -1) return
+    const points = roundScore(idx, base, teamId, teamsById)
+    if (points <= 0) return
+    const team = teamsById.get(teamId)
+    const multiplier = getSeedMultiplier(teamId, teamsById)
+    picks.push({ teamId, teamName: team?.abbreviation ?? teamId, rank: idx + 1, roundLabel, base, multiplier, points })
   }
 
-  return new Map(players.map(p => [p.id, wins[p.id]]))
-}
+  add(results.champion, 16, 'Champion')
+  for (const t of results.finalists) add(t, 8, 'Finals')
+  for (const t of results.conferenceFinals) add(t, 4, 'Conf. Finals')
+  for (const t of results.secondRound) add(t, 2, 'Second Round')
 
-function calculateWinningPaths(
-  players: Player[],
-  nbaSeries: Series[],
-  nhlSeries: Series[],
-  teamsById: Map<string, Team>
-): Map<string, PathEntry[] | 'any' | 'eliminated'> {
-  const allScenarios = buildAllScenarios(nbaSeries, nhlSeries, teamsById)
-  const result = new Map<string, PathEntry[] | 'any' | 'eliminated'>()
-
-  for (const player of players) {
-    const winningScenarios: PathEntry[] = []
-
-    for (const { nba, nhl } of allScenarios) {
-      const nbaRes = deriveResults(nba)
-      const nhlRes = deriveResults(nhl)
-      const myTotal =
-        calculatePlayerScore(player, nbaRes, 'nba', teamsById) +
-        calculatePlayerScore(player, nhlRes, 'nhl', teamsById)
-      const allTotals = players.map(p =>
-        calculatePlayerScore(p, nbaRes, 'nba', teamsById) +
-        calculatePlayerScore(p, nhlRes, 'nhl', teamsById)
-      )
-      if (myTotal === Math.max(...allTotals)) {
-        const nbaChamp = nba.find(s => s.round === 4)?.winner ?? ''
-        const nhlChamp = nhl.find(s => s.round === 4)?.winner ?? ''
-        winningScenarios.push({
-          nbaWinner: teamsById.get(nbaChamp)?.abbreviation ?? nbaChamp,
-          nhlWinner: teamsById.get(nhlChamp)?.abbreviation ?? nhlChamp,
-        })
-      }
-    }
-
-    if (winningScenarios.length === 0) result.set(player.id, 'eliminated')
-    else if (winningScenarios.length === allScenarios.length) result.set(player.id, 'any')
-    else result.set(player.id, winningScenarios)
-  }
-
-  return result
+  return picks.sort((a, b) => b.points - a.points)
 }
 
 // ── Main entry point ─────────────────────────────────────────────────────────
@@ -240,33 +121,13 @@ export function calculatePlayerScores(
   const nhlResults = deriveResults(nhlSeries)
   const teamsById = new Map(teams.map(t => [t.slug, t]))
 
-  const nbaR1Done = isRoundComplete(nbaSeries, 1)
-  const nhlR1Done = isRoundComplete(nhlSeries, 1)
-  const nbaR2Done = isRoundComplete(nbaSeries, 2)
-  const nhlR2Done = isRoundComplete(nhlSeries, 2)
-  const nbaR3Done = isRoundComplete(nbaSeries, 3)
-  const nhlR3Done = isRoundComplete(nhlSeries, 3)
-  const nbaR4Done = isRoundComplete(nbaSeries, 4)
-  const nhlR4Done = isRoundComplete(nhlSeries, 4)
-
-  const showWinProb = nbaR1Done && nhlR1Done && !(nbaR4Done && nhlR4Done)
-  const showPath    = nbaR3Done && nhlR3Done && !(nbaR4Done && nhlR4Done)
-
-  const winProbMap = showWinProb
-    ? calculateWinProbabilities(players, nbaSeries, nhlSeries, teamsById)
-    : null
-  const pathMap = showPath
-    ? calculateWinningPaths(players, nbaSeries, nhlSeries, teamsById)
-    : null
-
   return players
     .map((player) => {
       const nbaScore = calculatePlayerScore(player, nbaResults, 'nba', teamsById)
       const nhlScore = calculatePlayerScore(player, nhlResults, 'nhl', teamsById)
-      const entry: PlayerScore = { player, nbaScore, nhlScore, total: nbaScore + nhlScore }
-      if (winProbMap !== null) entry.winProbability = winProbMap.get(player.id)
-      if (pathMap !== null) entry.winningPaths = pathMap.get(player.id)
-      return entry
+      const nbaBreakdown = calculatePickBreakdown(player, nbaResults, 'nba', teamsById)
+      const nhlBreakdown = calculatePickBreakdown(player, nhlResults, 'nhl', teamsById)
+      return { player, nbaScore, nhlScore, total: nbaScore + nhlScore, nbaBreakdown, nhlBreakdown }
     })
     .sort((a, b) => b.total - a.total)
 }
